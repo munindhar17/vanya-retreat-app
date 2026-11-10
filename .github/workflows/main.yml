@@ -7,24 +7,31 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v5
 
       # Decode the upload keystore from secrets (skipped if not set yet).
       - name: Prepare signing key
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: |
           if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/upload.jks"
+            # Remove any spaces/line breaks added while copy-pasting the secret.
+            printf '%s' "$KEYSTORE_BASE64" | tr -d '[:space:]' | base64 --decode > "$RUNNER_TEMP/upload.jks" \
+              || { echo "::error::KEYSTORE_BASE64 is not valid base64 - re-copy it from KEYSTORE_BASE64.txt"; exit 1; }
+            # Check the password and alias before building, with a clear message.
+            keytool -list -keystore "$RUNNER_TEMP/upload.jks" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null \
+              || { echo "::error::Keystore password or KEY_ALIAS secret is wrong"; exit 1; }
             echo "KEYSTORE_PATH=$RUNNER_TEMP/upload.jks" >> "$GITHUB_ENV"
             echo "Release will be signed with your upload key."
           else
@@ -47,13 +54,13 @@ jobs:
           ls -la out
 
       - name: Upload APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: VanyaRetreat-APK
           path: out/*.apk
 
       - name: Upload AAB
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: VanyaRetreat-AAB
           path: out/*.aab
